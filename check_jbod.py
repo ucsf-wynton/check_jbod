@@ -403,13 +403,13 @@ if args.current:
                 MAX_CURRENT=current_max[position],
             ))
 
-if len(criticals) > 1:
+if len(criticals) >= 1:
     print('{criticals} | {perfdata}'.format(
         criticals=', '.join(criticals) + ', '.join(warnings),
         perfdata=' '.join(perfdata),
     ))
     sys.exit(2)
-elif len(warnings) > 1:
+elif len(warnings) >= 1:
     print('{warnings} | {perfdata}'.format(
         warnings=', '.join(warnings),
         perfdata=' '.join(perfdata),
