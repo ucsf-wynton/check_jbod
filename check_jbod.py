@@ -213,6 +213,9 @@ if args.temp:
             }
             temperature_thresholds.append(thresholds)
 
+    if not any(temperature_thresholds):
+        warnings.append("No temperature sensor thresholds found")
+
     for sensor in split_list(temperatures_info, 5):
         sensor_id = int(sensor[0].split()[1])
         status = re.match(r'.*status: (.*)', sensor[1]).group(1)
