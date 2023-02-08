@@ -1,3 +1,4 @@
+# vi:set expandtab shiftwidth=4:
 import re
 import sys
 import argparse
@@ -76,7 +77,31 @@ def ses_get_id_xyratex(sg_name):
             return int(mobj.group(1), 16)
 
 
-def get_sg_jbods():
+def ses_get_logical_id(sg_name):
+    """"""
+    cmdargs = ['sg_ses', '--page=0x02', '--index=0', '/dev/' + sg_name]
+    logging.debug('ses_get_logical_id: executing: %s', cmdargs)
+    try:
+        stdout, stderr = subprocess.Popen(cmdargs,
+                                          stdout=subprocess.PIPE,
+                                          stderr=subprocess.PIPE).communicate()
+    except OSError as err:
+        logging.warning('ses_get_logical_id: %s', err)
+        return None
+
+    for line in stderr.decode("utf-8").splitlines():
+        logging.debug('ses_get_logical_id: sg_ses(stderr): %s', line)
+        raise subprocess.CalledProcessError
+
+    for line in stdout.decode("utf-8").splitlines():
+        logging.debug('ses_get_logical_id: sg_ses: %s', line)
+        #  Primary enclosure logical identifier (hex): 5000ccab05028780
+        mobj = re.match(
+            r'\s+Primary enclosure logical identifier \(hex\): ([0-9A-Fa-f]+)', line)
+        if mobj:
+            return mobj.group(1)
+
+def get_sg_jbods(logical):
     """Return the sg device of the enclosures"""
     cmdargs = ['lsscsi', '-g']
     logging.debug('ses_get_enclosure_from_wwn: executing: %s', cmdargs)
@@ -102,20 +127,27 @@ def get_sg_jbods():
             if mobj:
                 model = mobj.group(1)
                 if model in ['SP-34106-CFFE12P', 'UD-8435-E6EBD', 'MD1420',
-                             'SP-3584-E12EBD', '2U12ENCJ12ESM3P', 'D32845U12GESM']:
+                             'SP-3584-E12EBD', '2U12ENCJ12ESM3P', 'D32845U12GESM',
+                             '4U60G2_STOR_ENCL', 'H4060-J']:
                     # A JBOD we know
                     sg = mobj.group(2)
-                    jbod_id = ses_get_id_xyratex(sg)
-                    jbods[jbod_id] = {'model': model, 'sg': '/dev/' + sg}
+                    if logical:
+                        jbod_id = ses_get_logical_id(sg)
+                    else:
+                        jbod_id = ses_get_id_xyratex(sg)
+                        if jbod_id is None:
+                            jbod_id = len(jbods)
+                    jbods[str(jbod_id)] = {'model': model, 'sg': '/dev/' + sg}
     return jbods
 
 
 parser = argparse.ArgumentParser(description='Monitor Fans, PSU and \
-temperature in a Xyratex JBOD')
+temperature in a Xyratex or HGST JBOD')
 parser.add_argument("-v", "--verbose", action="store_true",
                     help="increase output verbosity")
 parser.add_argument("device", help="JBOD ID to check",
-                    action="store", default=0, type=int)
+                    action="store", nargs='?')
+parser.add_argument("--logical", help="Use logical JBOD IDs", action="store_true")
 parser.add_argument("--fan", help="Check fan", action="store_true")
 parser.add_argument("--volt", help="Check voltage", action="store_true")
 parser.add_argument("--current", help="Check current", action="store_true")
@@ -129,7 +161,7 @@ args = parser.parse_args()
 if args.verbose:
     logging.basicConfig(level=logging.DEBUG)
 
-jbods = get_sg_jbods()
+jbods = get_sg_jbods(args.logical)
 
 if args.device not in jbods:
     print('JBOD with the request ID not found, only found:')
@@ -163,6 +195,12 @@ if args.fan:
     elif model == 'D32845U12GESM':
         fan_min = [7000] * 10
         fan_max = [8000] * 10
+    elif model == '4U60G2_STOR_ENCL':
+        fan_min = [2000] * 4
+        fan_max = [5000] * 4
+    elif model == 'H4060-J':
+        fan_min = [5000] * 4 + [2000] * 4
+        fan_max = [9000] * 4 + [16000] * 4
 
     for fan in [fans[i:i+4] for i in range(0, len(fans), 4)]:
         fan_number = int(fan[0].split()[1])
@@ -205,12 +243,27 @@ if args.temp:
         if low is None and high is None:
             temperature_thresholds.append(None)
         else:
-            thresholds = {
-                'high_critical': int(high.group(1)),
-                'high_warning': int(high.group(2)),
-                'low_critical': int(low.group(2)),
-                'low_warning': int(low.group(1)),
-            }
+            thresholds = {}
+            if high is not None:
+                thresholds.update({
+                    "high_critical": int(high.group(1)),
+                    "high_warning": int(high.group(2)),
+                })
+            else:
+                thresholds.update({
+                    "high_critical": sys.maxint,
+                    "high_warning": sys.maxint,
+                })
+            if low is not None:
+                thresholds.update({
+                    "low_critical": int(low.group(2)),
+                    "low_warning": int(low.group(1)),
+                })
+            else:
+                thresholds.update({
+                    "low_critical": -sys.maxint,
+                    "low_warning": -sys.maxint,
+                })
             temperature_thresholds.append(thresholds)
 
     if not any(temperature_thresholds):
@@ -274,6 +327,8 @@ if args.psu_status is True:
         online_psu = [0, 1]
     elif model == 'D32845U12GESM':
         online_psu = [0, 1]
+    elif model in ('4U60G2_STOR_ENCL', 'H4060-J'):
+        online_psu = [0, 1]
 
     # Lenovo JBODs return more info and in more lines
     if model == '2U12ENCJ12ESM3P':
@@ -291,6 +346,14 @@ if args.psu_status is True:
         psus_range = 5
         psu_info1 = 3
         psu_info2 = 4
+
+    # Hitachi Global Storage Technologies (HGST)/Western Digital JBODs
+    if model in ('4U60G2_STOR_ENCL', 'H4060-J'):
+        psus = raw_info["Power supply"][6:]
+        psus_range = 5
+        psu_info1 = 3
+        psu_info2 = 4
+
 
     for psu in [psus[i: i + psus_range] for i in range(0, len(psus), psus_range)]:  # noqa: E501
         psu_number = int(psu[0].split()[1])
@@ -336,6 +399,21 @@ if args.volt:
     elif model == '2U12ENCJ12ESM3P':
         volt_min = [4.5, 11.5, 4.5, 11.5]
         volt_max = [5.5, 12.5, 5.5, 12.5]
+    elif model == '4U60G2_STOR_ENCL':
+        # warn at 7.5% under or 5% over
+        volts = [5, 12, 210, 5, 12, 210, 12, 12, 12, 12]
+        volt_min = [v * (1 - 0.075) for v in volts]
+        volt_max = [v * (1.05) for v in volts]
+    elif model == 'H4060-J':
+        # 210V: high critical=16.5 %, high warning=13.5 %
+        # 210V: low warning=13.5 %, low critical=16.5 % (from nominal voltage)
+        # 5V, 12V: high critical=10.0 %, high warning=5.0 %
+        # 5V, 12V: low warning=7.5 %, low critical=10.0 % (from nominal voltage)
+        volts = [210, 12, 210, 12, 5, 12, 5, 12]
+        volt_min = [v * (1 - 0.075) for v in volts]
+        volt_min[0] = volt_min[2] = 210 * (1 - 0.135)
+        volt_max = [v * (1.05) for v in volts]
+        volt_max[0] = volt_max[2] = 210 * 1.135
 
     sensors = split_list(raw_info['Voltage sensor'], 5)[2:]
 
@@ -367,23 +445,40 @@ if args.current:
     if model == 'SP-34106-CFFE12P':
         current_min = [25, 1, None, None, 25, 1, None, None]
         current_max = [50, 3, None, None, 50, 3, None, None]
+        sensors = split_list(raw_info['Current sensor'], 4)[2:]
+        current_info = 0
     elif model == 'UD-8435-E6EBD' or model == 'SP-3584-E12EBD':
         current_min = [37.5, None, 37.5, None]
         current_max = [45, None, 45, None]
+        sensors = split_list(raw_info['Current sensor'], 4)[2:]
+        current_info = 0
     elif model == 'MD1420':
         current_min = [0.25, 0.25, 3, 3, 0, 0]
         current_max = [0.45, 0.45, 7, 7, 2, 2]
+        sensors = split_list(raw_info['Current sensor'], 4)[2:]
+        current_info = 0
     elif model == '2U12ENCJ12ESM3P':
         current_min = [0.40, 0.10, 0.40, 0.40]
         current_max = [42, 38, 42, 38]
-    sensors = split_list(raw_info['Current sensor'], 4)[2:]
+        sensors = split_list(raw_info['Current sensor'], 4)[2:]
+        current_info = 0
+    elif model == '4U60G2_STOR_ENCL':
+        current_min = [0.40, 0.10, 0.40, 0.40, 0.40, 0.10]
+        current_max = [16, 16, 16, 16, 16, 16]
+        sensors = split_list(raw_info['Current sensor'][5:], 4)
+        current_info = 3
+    elif model == 'H4060-J':
+        current_min = [0.40, 0.10, 0.40, 0.40, 0.40, 0.10, 0.40, 0.40]
+        current_max = [20, 40, 20, 40, 85, 38, 85, 38]
+        sensors = split_list(raw_info['Current sensor'][5:], 4)
+        current_info = 3
 
     for position in range(len(sensors)):
         if current_min[position] is None or current_max[position] is None:
             continue
 
         current = float(re.match(r'Current: (.*) amps',
-                        sensors[position][0]).group(1))
+                        sensors[position][current_info]).group(1))
         name = 'Current_{}'.format(position)
         if current > current_max[position]:
             criticals.append('{name} is too high ({current} A)'.format(
