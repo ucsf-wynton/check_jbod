@@ -200,8 +200,9 @@ if args.fan:
         fan_min = [2000] * 4
         fan_max = [5000] * 4
     elif model == 'H4060-J':
-        fan_min = [5000] * 4 + [2000] * 4
-        fan_max = [9000] * 4 + [16000] * 4
+        # TODO: figure actual reasonable values
+        fan_min = [4000] * 8
+        fan_max = [21000] * 8
 
     for fan in [fans[i:i+4] for i in range(0, len(fans), 4)]:
         fan_number = int(fan[0].split()[1])
