@@ -1,3 +1,4 @@
+#!/bin/python3
 # vi:set expandtab shiftwidth=4:
 import re
 import sys
