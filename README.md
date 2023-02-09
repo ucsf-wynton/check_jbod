@@ -19,7 +19,7 @@ Added support for Hitachi Global Storage Technologies (HGST) aka Western Digital
 * `sg_ses`
 
 ## Usage
-This script is intended to be used with NRPE. The device ID is the number on the LCD screen or set via the CLI on the Exos 4U106.
+This script is intended to be used with NRPE. The device ID is the number on the LCD screen or set via the CLI on the Exos 4U106.  Since HGST JBODs don't have those numbers, the device ID is the enumeration index. If --logical is given, then the device ID is the primary enclosure logical identifier.  If no device is given, then a list of the possible IDs is shown.
 
 ```
 usage: check_jbod.py [-h] [-v] [--fan] [--volt] [--current] [--psu_status]
@@ -34,7 +34,7 @@ positional arguments:
 optional arguments:
   -h, --help     show this help message and exit
   -v, --verbose  increase output verbosity
-  --logical	 Use primary enclosure logical identifier for JBOD ID
+  --logical      Use logical JBOD IDs
   --fan          Check fan
   --volt         Check voltage
   --current      Check current
