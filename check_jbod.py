@@ -253,8 +253,8 @@ if args.temp:
                 })
             else:
                 thresholds.update({
-                    "high_critical": sys.maxint,
-                    "high_warning": sys.maxint,
+                    "high_critical": sys.maxsize,
+                    "high_warning": sys.maxsize,
                 })
             if low is not None:
                 thresholds.update({
@@ -263,8 +263,8 @@ if args.temp:
                 })
             else:
                 thresholds.update({
-                    "low_critical": -sys.maxint,
-                    "low_warning": -sys.maxint,
+                    "low_critical": -sys.maxsize,
+                    "low_warning": -sys.maxsize,
                 })
             temperature_thresholds.append(thresholds)
 
