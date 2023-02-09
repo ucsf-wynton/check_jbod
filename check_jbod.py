@@ -34,7 +34,7 @@ def sg_ses_info(device, page):
         sys.exit(3)
 
     current_section = ''
-    lines = stdout.decode("utf-8").split('\n')
+    lines = stdout.decode("utf-8").strip().split('\n')
     for line in lines:
         section_name = re.match(r'^\s\s\s\sElement type: (.*),.*$', line)
         if section_name:
