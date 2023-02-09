@@ -11,6 +11,10 @@ This tool is used to monitor Xyratex JBOD, also known as:
 These JBODs are probably also supported with some slight modifications:
 - Dell MD1280
 
+Added support for Hitachi Global Storage Technologies (HGST) aka Western Digital JBODs:
+- 4U60G2_STOR_ENCL
+- H4060-J
+
 ## Requirements
 * `sg_ses`
 
@@ -30,6 +34,7 @@ positional arguments:
 optional arguments:
   -h, --help     show this help message and exit
   -v, --verbose  increase output verbosity
+  --logical	 Use primary enclosure logical identifier for JBOD ID
   --fan          Check fan
   --volt         Check voltage
   --current      Check current
